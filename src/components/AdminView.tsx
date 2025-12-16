@@ -1,22 +1,50 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import type { Database } from '../types/database';
 
-type User = Database['public']['Tables']['users']['Row'];
+type User = {
+  id: string;
+  email: string;
+  nickname: string;
+  is_admin: boolean;
+  is_active: boolean;
+};
+
+type Utensil = {
+  id: string;
+  name: string;
+  icon: string;
+  sort_order: number;
+  is_active: boolean;
+};
 
 export default function AdminView() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [utensils, setUtensils] = useState<Database['public']['Tables']['utensils']['Row'][]>([]);
+  const [utensils, setUtensils] = useState<Utensil[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
+  const [showCreateUser, setShowCreateUser] = useState(false);
+  const [showRecurringEvent, setShowRecurringEvent] = useState(false);
   
   // Form state for new event
   const [eventDate, setEventDate] = useState('');
   const [startTime, setStartTime] = useState('19:00');
   const [endTime, setEndTime] = useState('21:00');
   const [location, setLocation] = useState('Sportplatz Gummerwald');
+  
+  // Form state for new user
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserNickname, setNewUserNickname] = useState('');
+  const [newUserPassword, setNewUserPassword] = useState('');
+  
+  // Form state for recurring event
+  const [recurringDayOfWeek, setRecurringDayOfWeek] = useState(1); // 1 = Montag
+  const [recurringStartDate, setRecurringStartDate] = useState('');
+  const [recurringEndDate, setRecurringEndDate] = useState('');
+  const [recurringStartTime, setRecurringStartTime] = useState('19:00');
+  const [recurringEndTime, setRecurringEndTime] = useState('21:00');
+  const [recurringLocation, setRecurringLocation] = useState('Sportplatz Gummerwald');
 
   useEffect(() => {
     loadData();
@@ -57,6 +85,78 @@ export default function AdminView() {
     }
   };
 
+  const createUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newUserEmail || !newUserNickname || !newUserPassword) {
+      alert('Bitte fülle alle Felder aus');
+      return;
+    }
+
+    try {
+      // 1. Create user in Supabase Auth
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
+        email: newUserEmail,
+        password: newUserPassword,
+        email_confirm: true,
+      });
+
+      if (authError) throw authError;
+
+      // 2. Create user profile in users table
+      const { error: profileError } = await supabase.from('users').insert({
+        id: authData.user.id,
+        email: newUserEmail,
+        nickname: newUserNickname,
+        is_admin: false,
+        is_active: true,
+      });
+
+      if (profileError) throw profileError;
+
+      // Reset form
+      setNewUserEmail('');
+      setNewUserNickname('');
+      setNewUserPassword('');
+      setShowCreateUser(false);
+      
+      await loadData();
+      alert('User erfolgreich erstellt!');
+    } catch (error: any) {
+      console.error('Error creating user:', error);
+      alert('Fehler beim Erstellen des Users: ' + (error.message || 'Unbekannter Fehler'));
+    }
+  };
+
+  const deleteUser = async (userId: string, userEmail: string) => {
+    if (!confirm(`User "${userEmail}" wirklich löschen? Dies kann nicht rückgängig gemacht werden!`)) {
+      return;
+    }
+
+    try {
+      // 1. Delete from users table (cascades to other tables)
+      const { error: profileError } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', userId);
+
+      if (profileError) throw profileError;
+
+      // 2. Delete from Supabase Auth
+      const { error: authError } = await supabase.auth.admin.deleteUser(userId);
+      
+      if (authError) {
+        console.error('Warning: User deleted from database but not from auth:', authError);
+      }
+
+      await loadData();
+      alert('User erfolgreich gelöscht!');
+    } catch (error) {
+      console.error('Error deleting user:', error);
+      alert('Fehler beim Löschen des Users');
+    }
+  };
+
   const createEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     
@@ -88,6 +188,61 @@ export default function AdminView() {
     } catch (error) {
       console.error('Error creating event:', error);
       alert('Fehler beim Erstellen des Events');
+    }
+  };
+
+  const createRecurringEvent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!recurringStartDate || !recurringEndDate || !recurringStartTime || !recurringEndTime || !recurringLocation) {
+      alert('Bitte fülle alle Felder aus');
+      return;
+    }
+
+    if (new Date(recurringStartDate) > new Date(recurringEndDate)) {
+      alert('End-Datum muss nach Start-Datum liegen');
+      return;
+    }
+
+    try {
+      // 1. Create recurring template
+      const { data: template, error: templateError } = await supabase
+        .from('recurring_event_templates')
+        .insert({
+          title: 'Training',
+          day_of_week: recurringDayOfWeek,
+          start_time: recurringStartTime,
+          end_time: recurringEndTime,
+          location: recurringLocation,
+          start_date: recurringStartDate,
+          end_date: recurringEndDate,
+          created_by: currentUser?.id,
+        })
+        .select()
+        .single();
+
+      if (templateError) throw templateError;
+
+      // 2. Generate events from template using SQL function
+      const { error: generateError } = await supabase.rpc('generate_events_from_template', {
+        template_id: template.id,
+      });
+
+      if (generateError) throw generateError;
+
+      // Reset form
+      setRecurringDayOfWeek(1);
+      setRecurringStartDate('');
+      setRecurringEndDate('');
+      setRecurringStartTime('19:00');
+      setRecurringEndTime('21:00');
+      setRecurringLocation('Sportplatz Gummerwald');
+      setShowRecurringEvent(false);
+      
+      alert('Serientermine erfolgreich erstellt!');
+    } catch (error) {
+      console.error('Error creating recurring event:', error);
+      alert('Fehler beim Erstellen der Serientermine');
     }
   };
 
