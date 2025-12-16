@@ -18,6 +18,16 @@ type Utensil = {
   is_active: boolean;
 };
 
+const WEEKDAYS = [
+  { value: 0, label: 'Sonntag' },
+  { value: 1, label: 'Montag' },
+  { value: 2, label: 'Dienstag' },
+  { value: 3, label: 'Mittwoch' },
+  { value: 4, label: 'Donnerstag' },
+  { value: 5, label: 'Freitag' },
+  { value: 6, label: 'Samstag' },
+];
+
 export default function AdminView() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
@@ -39,7 +49,7 @@ export default function AdminView() {
   const [newUserPassword, setNewUserPassword] = useState('');
   
   // Form state for recurring event
-  const [recurringDayOfWeek, setRecurringDayOfWeek] = useState(1); // 1 = Montag
+  const [recurringDayOfWeek, setRecurringDayOfWeek] = useState(1);
   const [recurringStartDate, setRecurringStartDate] = useState('');
   const [recurringEndDate, setRecurringEndDate] = useState('');
   const [recurringStartTime, setRecurringStartTime] = useState('19:00');
@@ -94,7 +104,6 @@ export default function AdminView() {
     }
 
     try {
-      // 1. Create user in Supabase Auth
       const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: newUserEmail,
         password: newUserPassword,
@@ -103,7 +112,6 @@ export default function AdminView() {
 
       if (authError) throw authError;
 
-      // 2. Create user profile in users table
       const { error: profileError } = await supabase.from('users').insert({
         id: authData.user.id,
         email: newUserEmail,
@@ -114,7 +122,6 @@ export default function AdminView() {
 
       if (profileError) throw profileError;
 
-      // Reset form
       setNewUserEmail('');
       setNewUserNickname('');
       setNewUserPassword('');
@@ -124,7 +131,7 @@ export default function AdminView() {
       alert('User erfolgreich erstellt!');
     } catch (error: any) {
       console.error('Error creating user:', error);
-      alert('Fehler beim Erstellen des Users: ' + (error.message || 'Unbekannter Fehler'));
+      alert('Fehler: ' + (error.message || 'Unbekannter Fehler'));
     }
   };
 
@@ -134,7 +141,6 @@ export default function AdminView() {
     }
 
     try {
-      // 1. Delete from users table (cascades to other tables)
       const { error: profileError } = await supabase
         .from('users')
         .delete()
@@ -142,7 +148,6 @@ export default function AdminView() {
 
       if (profileError) throw profileError;
 
-      // 2. Delete from Supabase Auth
       const { error: authError } = await supabase.auth.admin.deleteUser(userId);
       
       if (authError) {
@@ -177,7 +182,6 @@ export default function AdminView() {
 
       if (error) throw error;
 
-      // Reset form
       setEventDate('');
       setStartTime('19:00');
       setEndTime('21:00');
@@ -205,7 +209,6 @@ export default function AdminView() {
     }
 
     try {
-      // 1. Create recurring template
       const { data: template, error: templateError } = await supabase
         .from('recurring_event_templates')
         .insert({
@@ -223,14 +226,12 @@ export default function AdminView() {
 
       if (templateError) throw templateError;
 
-      // 2. Generate events from template using SQL function
       const { error: generateError } = await supabase.rpc('generate_events_from_template', {
         template_id: template.id,
       });
 
       if (generateError) throw generateError;
 
-      // Reset form
       setRecurringDayOfWeek(1);
       setRecurringStartDate('');
       setRecurringEndDate('');
@@ -263,25 +264,38 @@ export default function AdminView() {
         <h2 className="text-2xl font-bold text-gray-900 mb-4">Admin-Bereich</h2>
       </div>
 
-      {/* Create Event Section */}
+      {/* Event Management Section */}
       <div className="card">
         <div className="flex justify-between items-center mb-4">
           <h3 className="text-lg font-semibold text-gray-900">Events verwalten</h3>
-          <button
-            onClick={() => setShowCreateEvent(!showCreateEvent)}
-            className="btn-primary"
-          >
-            {showCreateEvent ? 'Abbrechen' : '+ Neues Event'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => {
+                setShowCreateEvent(!showCreateEvent);
+                setShowRecurringEvent(false);
+              }}
+              className="btn-primary text-sm"
+            >
+              {showCreateEvent ? 'Abbrechen' : '+ Einzeltermin'}
+            </button>
+            <button
+              onClick={() => {
+                setShowRecurringEvent(!showRecurringEvent);
+                setShowCreateEvent(false);
+              }}
+              className="btn-secondary text-sm"
+            >
+              {showRecurringEvent ? 'Abbrechen' : '+ Serientermin'}
+            </button>
+          </div>
         </div>
 
         {showCreateEvent && (
-          <form onSubmit={createEvent} className="space-y-4 bg-gray-50 p-4 rounded-lg">
+          <form onSubmit={createEvent} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-4">
+            <h4 className="font-semibold text-gray-900">Einzeltermin erstellen</h4>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Datum *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Datum *</label>
                 <input
                   type="date"
                   value={eventDate}
@@ -290,25 +304,18 @@ export default function AdminView() {
                   required
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Ort *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ort *</label>
                 <input
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   className="input-field"
-                  placeholder="Sportplatz Gummerwald"
                   required
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Start-Zeit *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start-Zeit *</label>
                 <input
                   type="time"
                   value={startTime}
@@ -317,11 +324,8 @@ export default function AdminView() {
                   required
                 />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  End-Zeit *
-                </label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">End-Zeit *</label>
                 <input
                   type="time"
                   value={endTime}
@@ -331,39 +335,175 @@ export default function AdminView() {
                 />
               </div>
             </div>
+            <button type="submit" className="w-full btn-primary">Event erstellen</button>
+          </form>
+        )}
 
-            <button type="submit" className="w-full btn-primary">
-              Event erstellen
-            </button>
+        {showRecurringEvent && (
+          <form onSubmit={createRecurringEvent} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-4">
+            <h4 className="font-semibold text-gray-900">Wöchentlichen Serientermin erstellen</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Wochentag *</label>
+                <select
+                  value={recurringDayOfWeek}
+                  onChange={(e) => setRecurringDayOfWeek(parseInt(e.target.value))}
+                  className="input-field"
+                  required
+                >
+                  {WEEKDAYS.map(day => (
+                    <option key={day.value} value={day.value}>{day.label}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Ort *</label>
+                <input
+                  type="text"
+                  value={recurringLocation}
+                  onChange={(e) => setRecurringLocation(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Von Datum *</label>
+                <input
+                  type="date"
+                  value={recurringStartDate}
+                  onChange={(e) => setRecurringStartDate(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Bis Datum *</label>
+                <input
+                  type="date"
+                  value={recurringEndDate}
+                  onChange={(e) => setRecurringEndDate(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Start-Zeit *</label>
+                <input
+                  type="time"
+                  value={recurringStartTime}
+                  onChange={(e) => setRecurringStartTime(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">End-Zeit *</label>
+                <input
+                  type="time"
+                  value={recurringEndTime}
+                  onChange={(e) => setRecurringEndTime(e.target.value)}
+                  className="input-field"
+                  required
+                />
+              </div>
+            </div>
+            <div className="bg-blue-50 border border-blue-200 text-blue-800 px-4 py-3 rounded-lg text-sm">
+              <strong>Info:</strong> Es werden automatisch alle {WEEKDAYS.find(d => d.value === recurringDayOfWeek)?.label}e 
+              im angegebenen Zeitraum als Trainings erstellt.
+            </div>
+            <button type="submit" className="w-full btn-primary">Serientermine erstellen</button>
           </form>
         )}
       </div>
 
       {/* User Management Section */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Spieler-Verwaltung
-        </h3>
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-lg font-semibold text-gray-900">Spieler-Verwaltung</h3>
+          <button
+            onClick={() => setShowCreateUser(!showCreateUser)}
+            className="btn-primary text-sm"
+          >
+            {showCreateUser ? 'Abbrechen' : '+ Neuer Spieler'}
+          </button>
+        </div>
+
+        {showCreateUser && (
+          <form onSubmit={createUser} className="space-y-4 bg-gray-50 p-4 rounded-lg mb-4">
+            <h4 className="font-semibold text-gray-900">Neuen Spieler erstellen</h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Email *</label>
+                <input
+                  type="email"
+                  value={newUserEmail}
+                  onChange={(e) => setNewUserEmail(e.target.value)}
+                  className="input-field"
+                  placeholder="spieler@example.com"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Spitzname *</label>
+                <input
+                  type="text"
+                  value={newUserNickname}
+                  onChange={(e) => setNewUserNickname(e.target.value)}
+                  className="input-field"
+                  placeholder="Max"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Passwort *</label>
+                <input
+                  type="password"
+                  value={newUserPassword}
+                  onChange={(e) => setNewUserPassword(e.target.value)}
+                  className="input-field"
+                  placeholder="Mindestens 6 Zeichen"
+                  minLength={6}
+                  required
+                />
+              </div>
+            </div>
+            <button type="submit" className="w-full btn-primary">Spieler erstellen</button>
+          </form>
+        )}
+
         <div className="space-y-2">
-          {users.map((user) => (
+          {users.map(user => (
             <div
               key={user.id}
               className="flex justify-between items-center p-3 bg-gray-50 rounded-lg"
             >
               <div>
-                <p className="font-medium text-gray-900">{user.nickname}</p>
+                <p className="font-medium text-gray-900">
+                  {user.nickname}
+                  {user.is_admin && <span className="ml-2 text-xs bg-primary-100 text-primary-700 px-2 py-1 rounded">Admin</span>}
+                </p>
                 <p className="text-sm text-gray-600">{user.email}</p>
               </div>
-              <button
-                onClick={() => toggleUserActive(user.id, user.is_active)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                  user.is_active
-                    ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                    : 'bg-red-100 text-red-700 hover:bg-red-200'
-                }`}
-              >
-                {user.is_active ? '✓ Aktiv' : '✗ Blockiert'}
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => toggleUserActive(user.id, user.is_active)}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    user.is_active
+                      ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                      : 'bg-red-100 text-red-700 hover:bg-red-200'
+                  }`}
+                >
+                  {user.is_active ? '✓ Aktiv' : '✗ Blockiert'}
+                </button>
+                {user.id !== currentUser?.id && (
+                  <button
+                    onClick={() => deleteUser(user.id, user.email)}
+                    className="px-3 py-1.5 rounded-lg text-sm font-medium bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                  >
+                    Löschen
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>
@@ -371,11 +511,9 @@ export default function AdminView() {
 
       {/* Utensils Display Section */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-          Definierte Utensilien
-        </h3>
+        <h3 className="text-lg font-semibold text-gray-900 mb-4">Definierte Utensilien</h3>
         <div className="flex flex-wrap gap-2">
-          {utensils.map((utensil) => (
+          {utensils.map(utensil => (
             <div
               key={utensil.id}
               className={`px-4 py-2 rounded-lg text-sm font-medium ${
