@@ -250,3 +250,6 @@ Bei Fragen oder Problemen:
 ## 📄 Lizenz
 
 Private Projekt für den persönlichen Gebrauch.
+
+
+
