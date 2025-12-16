@@ -154,6 +154,50 @@ export interface Database {
           created_at?: string
         }
       }
+      recurring_event_templates: {
+        Row: {
+          id: string
+          title: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+          location: string
+          start_date: string
+          end_date: string
+          is_active: boolean
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title?: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+          location: string
+          start_date: string
+          end_date: string
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          day_of_week?: number
+          start_time?: string
+          end_time?: string
+          location?: string
+          start_date?: string
+          end_date?: string
+          is_active?: boolean
+          created_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+      }
     }
     Views: {
       [_ in never]: never
