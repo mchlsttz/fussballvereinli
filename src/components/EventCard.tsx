@@ -24,7 +24,7 @@ interface AssignmentWithDetails extends UtensilAssignment {
 }
 
 export default function EventCard({ event, onUpdate }: EventCardProps) {
-  const { user, profile } = useAuth();
+  const { user } = useAuth();
   const [responses, setResponses] = useState<ResponseWithUser[]>([]);
   const [utensils, setUtensils] = useState<Utensil[]>([]);
   const [assignments, setAssignments] = useState<AssignmentWithDetails[]>([]);

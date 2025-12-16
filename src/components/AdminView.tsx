@@ -8,7 +8,7 @@ type User = Database['public']['Tables']['users']['Row'];
 export default function AdminView() {
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
-  const [utensils, setUtensils] = useState<Database['public']['Tables']['utensils']['Row']>([]);
+  const [utensils, setUtensils] = useState<Database['public']['Tables']['utensils']['Row'][]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateEvent, setShowCreateEvent] = useState(false);
   
